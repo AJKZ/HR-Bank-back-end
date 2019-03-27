@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 
 const server = restify.createServer({
     name: 'bank_back-end',
-    version: '1.0.0'
+    version: '1.1.0'
 });
 
 server.use(restify.plugins.bodyParser());
