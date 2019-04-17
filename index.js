@@ -8,7 +8,7 @@ const server = restify.createServer({
 
 server.use(restify.plugins.bodyParser());
 
-mongoose.connect('mongodb://localhost:27017/alfa', {useNewUrlParser: true});
+mongoose.connect('mongodb://localhost:27017/test', {useNewUrlParser: true});
 
 const User = mongoose.model('User', { 
     iban: String,
@@ -16,27 +16,7 @@ const User = mongoose.model('User', {
     balance: Number
 });
 
-server.post('/withdraw', function (req, res, next) {
-    const iban = req.body.iban
-    const amount = req.body.amount
-
-    return User.findOneAndUpdate({iban: iban}, {$inc: {balance: -amount}}, {new: true})
-        .then(function handleUpdateResult(result) {
-            res.send(200, result)
-        });
-});
-
-server.post('/deposit', function (req, res, next) {
-    const iban = req.body.iban
-    const amount = req.body.amount
-
-    return User.findOneAndUpdate({iban: iban}, {$inc: {balance: amount}}, {new: true})
-        .then(function handleUpdateResult(result) {
-            res.send(200, result)
-        });
-});
-
-server.post('/login', function(req, res, next) {
+server.post('/login', async (req, res, next) => {
     const iban = req.body.iban
     const pin = req.body.pin
 
@@ -56,6 +36,26 @@ server.post('/login', function(req, res, next) {
     res.send(200, 'success')
 });
 
-server.listen(8080, function () {
+server.post('/withdraw', async (req, res, next) => {
+    const iban = req.body.iban
+    const amount = req.body.amount
+
+    const result = await User.findOneAndUpdate({ iban: iban }, { $inc: { balance: -amount } }, { new: true });
+    res.send(200, result);
+});
+
+/*
+server.post('/deposit', function (req, res, next) {
+    const iban = req.body.iban
+    const amount = req.body.amount
+
+    return User.findOneAndUpdate({iban: iban}, {$inc: {balance: amount}}, {new: true})
+        .then(function handleUpdateResult(result) {
+            res.send(200, result)
+        });
+});
+*/
+
+server.listen(8080, () => {
     console.log('%s listening at %s', server.name, server.url);
 });
