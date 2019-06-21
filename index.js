@@ -161,12 +161,13 @@ server.post('/login', (req, res, next) => {
                         }
                     })
                     .catch((error) => {
-                        console.log('\n[LOG]:[LOGIN]:CANNOT CONDUCT SEARCH. DATABASE POSSIBLY OFFLINE.\n');
+                        console.log('\n[LOG]:[LOGIN]:COULD NOT CONDUCT SEARCH ON IBAN-PIN COMBINATION.\n');
                         console.log(error);
                         console.log('\n[LOG]:[LOGIN]:ENDLOG\n');
                     })
             })
             .catch((error) => {
+                console.log('\n[LOG]:[LOGIN]:IBAN IS BLOCKED.');
                 console.log(error);
                 res.send(error);
             });
@@ -177,14 +178,16 @@ server.post('/getbalance', (req, res, next) => {
     const iban = req.body.iban;
     const pin = req.body.pin;
 
+    // find user with iban and pin
     return User.findOne({$and: [{iban: iban}, {pin: pin}]})
-        .then(function handleBalanceResult(result) {
+        .then((result) => {
             console.log(result);
+            // send back the balance
             res.send(200, result.balance);
         })
-        .catch(function handleBalanceError(error) {
+        .catch((error) => {
             console.log(error);
-            res.send(500, error);
+            res.send(error);
         });
 });
 
@@ -193,11 +196,18 @@ server.post('/withdraw', (req, res, next) => {
     const pin = req.body.pin;
     const amount = req.body.amount;
 
+    // find iban and pin
     User.findOne({$and: [{iban: iban}, {pin: pin}]})
+        // if user is found
         .then(function withdrawable(user) {
-            if(user.balance >= amount) {
+            if(amount > user.balance) {
+                res.send(412, 'Balance too low.\n');
+            }
+            else {
+                // subtract amount from balance
                 User.findOneAndUpdate({$and: [{ iban: iban }, { pin: pin }]}, { $inc: { balance: -amount } }, { new: true })
-                    .then(function handleWithdrawResult() {
+                    .then(() => {
+                        //create a transaction document in database
                         Transaction.create({
                             iban: iban,
                             amount: amount,
@@ -207,17 +217,21 @@ server.post('/withdraw', (req, res, next) => {
                         .then(result => {
                             res.send(200, result);
                         })
+                        .catch((error) => {
+                            console.log('\n[LOG]:[WITHDRAW]:COULD NOT CREATE TRANSACTION DOCUMENT.\n');
+                            console.log(error);
+                            console.log('\n[LOG]:[WITHDRAW]:ENDLOG\n');
+                        })
                     })
-                    .catch(function handleWithdrawError(error) {
-                        res.send(500, error);
+                    .catch((error) => {
+                        console.log(error);
+                        res.send(error);
                     });
             }
-            else {
-                res.send(500, 'Balance too low.\n');
-            }
         })
-        .catch(function handleError(error) {
-            res.send(500, error);
+        .catch((error) => {
+            console.log(error);
+            res.send(error);
         })
 });
 
