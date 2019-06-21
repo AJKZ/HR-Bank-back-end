@@ -1,7 +1,7 @@
 const corsMiddleware = require('restify-cors-middleware');
 const restify = require('restify');
 const mongoose = require('mongoose');
-require('dotenv').config()
+require('dotenv').config();
 
 const server = restify.createServer({
     name: 'bank_back-end',
@@ -25,9 +25,9 @@ mongoose.connect('mongodb://localhost:27017/sber', { useNewUrlParser: true })
     })
     .catch((error) => {
         console.log(error)
-    })
+    });
 
-// mongoose.connect('mongodb+srv://<user>:<pass>cluster0-gpvua.azure.mongodb.net/sber', { useNewUrlParser: true })
+// mongoose.connect('mongodb+srv://AJKZ:<password>@cluster-hr-sber-gpvua.mongodb.net/test?retryWrites=true&w=majority', { useNewUrlParser: true })
 //     .then(() => {
 //         console.log('connected')
 //     })
@@ -60,11 +60,12 @@ const Transaction = mongoose.model('Transaction', {
     time: Date
 });
 
-/* VARIABLES */
+
+/**VARIABLES */
 const MAX_LOGIN_ATTEMPTS = 3;
 
 
-/* VALIDATION */
+/**VALIDATION */
 function validateIban(iban) {
     const ibanUpper = iban.toUpperCase()
 
@@ -81,7 +82,6 @@ function validateIban(iban) {
     if(ibanValidated != 1){
       return false
     }
-
     return true
 }
 
@@ -101,37 +101,76 @@ function calcControlNum(input){
 }
 
 
-/* SERVER REQUEST HANDLING */
+/**REQUEST HANDLING */
 server.post('/login', (req, res, next) => {
-    const iban = req.body.iban;
-    const pin = req.body.pin;
+    const reqIBAN = req.body.iban;
+    const reqPIN = req.body.pin;
 
-    return User.findOne({$and: [{iban: iban}, {pin: pin}, { attempts: { $lt: MAX_LOGIN_ATTEMPTS } }]})
-        .then(function handleLoginResult(result) {
-            console.log('handle login')
-            console.log(result)
-            if(result == null) {
-                res.send(403, 'Login invalid. \n');
-            }
-            else {
-                res.send(200, 'Login success. \n');
-            }
-        })
-        .catch(function handleLoginError(error) {
-            console.log("login error")
-            console.log(error)
-            User.findOneAndUpdate({$and: [{iban: iban}, {pin: pin}]}, { $inc: { attempts: 1 } })
-                .then(function loginErrorIncAttempt(result) {
-                    console.log("handling increment result")
-                    console.log(result)
-                    res.send(result);
-                })
-                .catch(function handleIncError(error) {
-                    console.log('handling increment error')
-                    console.log(error)
-                    res.send(error);
-                });
-        });
+    // check if IBAN valid
+    if(validateIban(reqIBAN) == false) {
+        console.log('invalid iban\n');
+        res.send(401, 'Invalid IBAN\n');
+    }
+    else {
+        // look for the IBAN and check if it's not blocked
+        return User.findOne({$and: [{ iban: reqIBAN }, { attempts: { $lt: MAX_LOGIN_ATTEMPTS } }]})
+            .then((result) => {
+
+                console.log('\n[LOG]:[LOGIN]:FIND IBAN AND CHECK ATTEMPTS');
+                console.log(result);
+                console.log('[LOG]:[LOGIN]:ENDLOG\n');
+
+                User.findOne({$and: [{ iban: reqIBAN }, { pin: reqPIN }]})
+                    .then((result) => {
+
+                        console.log('[LOG]:[LOGIN]:FIND IBAN AND PIN COMBINATION');
+                        //console.log(result);
+                        console.log('[LOG]:[LOGIN]:ENDLOG\n');
+
+                        if(result == null) {
+
+                            console.log('[LOG]:[LOGIN]:IBAN AND PIN COMBINATION NOT FOUND');
+                            console.log('[LOG]:[LOGIN]:INCREMENTING ATTEMPTS ON IBAN');
+                            console.log('[LOG]:[LOGIN]:ENDLOG\n');
+
+                            User.findOneAndUpdate({$and: [{ iban: reqIBAN }]}, { $inc: { attempts: 1 }})
+                                .then((result) => {
+                                    console.log('\n[LOG]:[LOGIN]:ATTEMPTS INCREMENTED');
+                                    console.log(result);
+                                    console.log('[LOG]:[LOGIN]:ENDLOG\n');
+                                    res.send(401, 'Incorrect PIN');
+                                })
+                                .catch((error) => {
+                                    console.log('[LOG]:[LOGIN]:ATTEMPTS INCREMENTATION FAILURE');
+                                    console.log(error);
+                                    console.log('[LOG]:[LOGIN]:ENDLOG\n');
+                                })
+                        }
+                        else {
+                            User.findOneAndUpdate({$and: [{ iban: reqIBAN }]}, { attempts: 0 }) 
+                            .then((result) => {
+                                console.log('[LOG]:[LOGIN]:LOG IN SUCCESS. ATTEMPTS RESET.');
+                                console.log('[LOG]:[LOGIN]:ENDLOG\n');
+                                res.send(200, result);
+                            })
+                            .catch((error) => {
+                                console.log('[LOG]:[LOGIN]:UNABLE TO FIND IBAN.');
+                                console.log(error);
+                                console.log('[LOG]:[LOGIN]:ENDLOG\n');
+                            });
+                        }
+                    })
+                    .catch((error) => {
+                        console.log('\n[LOG]:[LOGIN]:CANNOT CONDUCT SEARCH. DATABASE POSSIBLY OFFLINE.\n');
+                        console.log(error);
+                        console.log('\n[LOG]:[LOGIN]:ENDLOG\n');
+                    })
+            })
+            .catch((error) => {
+                console.log(error);
+                res.send(error);
+            });
+    }
 });
 
 server.post('/getbalance', (req, res, next) => {
@@ -140,11 +179,11 @@ server.post('/getbalance', (req, res, next) => {
 
     return User.findOne({$and: [{iban: iban}, {pin: pin}]})
         .then(function handleBalanceResult(result) {
-            console.log(result)
+            console.log(result);
             res.send(200, result.balance);
         })
         .catch(function handleBalanceError(error) {
-            console.log(error)
+            console.log(error);
             res.send(500, error);
         });
 });
@@ -158,41 +197,31 @@ server.post('/withdraw', (req, res, next) => {
         .then(function withdrawable(user) {
             if(user.balance >= amount) {
                 User.findOneAndUpdate({$and: [{ iban: iban }, { pin: pin }]}, { $inc: { balance: -amount } }, { new: true })
-                    .then(function handleWithdrawResult(result) {
-                        res.send(200, result);
+                    .then(function handleWithdrawResult() {
+                        Transaction.create({
+                            iban: iban,
+                            amount: amount,
+                            location: "SBER-ATM01",
+                            time: new Date()
+                        })
+                        .then(result => {
+                            res.send(200, result);
+                        })
                     })
                     .catch(function handleWithdrawError(error) {
                         res.send(500, error);
                     });
             }
             else {
-                res.send(500, 'Balance too low.\n')
+                res.send(500, 'Balance too low.\n');
             }
         })
         .catch(function handleError(error) {
-            res.send(500, error)
+            res.send(500, error);
         })
-
-    // User.findOneAndUpdate({$and: [{ iban: iban }, { pin: pin }]}, { $inc: { balance: -amount } }, { new: true })
-    //     .then(function handleWithdrawResult(result) {
-    //         res.send(200, result);
-    //     })
-    //     .catch(function handleWithdrawError(error) {
-    //         res.send(500, error);
-    //     });
 });
 
-// server.post('/deposit', function (req, res, next) {
-//     const iban = req.body.iban
-//     const amount = req.body.amount
-
-//     return User.findOneAndUpdate({iban: iban}, {$inc: {balance: amount}}, {new: true})
-//         .then(function handleUpdateResult(result) {
-//             res.send(200, result)
-//         });
-// });
-
-
+/**RUN */
 server.listen(8080, () => {
     console.log('%s listening at %s', server.name, server.url);
 });
