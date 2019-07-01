@@ -19,21 +19,22 @@ server.use(cors.actual);
 server.use(restify.plugins.bodyParser());
 
 /**CONNECTION */
-mongoose.connect('mongodb://localhost:27017/sber', { useNewUrlParser: true })
-    .then(() => {
-        console.log('connected')
-    })
-    .catch((error) => {
-        console.log(error)
-    });
-
-// mongoose.connect('mongodb+srv://AJKZ:<password>@cluster-hr-sber-gpvua.mongodb.net/test?retryWrites=true&w=majority', { useNewUrlParser: true })
+// mongoose.connect('mongodb://localhost:27017/sber', { useNewUrlParser: true })
 //     .then(() => {
 //         console.log('connected')
 //     })
-//     .catch(function handleMongooseError(error) {
+//     .catch((error) => {
 //         console.log(error)
-//     })
+//     });
+
+mongoose.connect('mongodb+srv://AJKZ:Ek3dcggfvtrMDB@cluster-hr-sber-gpvua.mongodb.net/sber?retryWrites=true&w=majority', { useNewUrlParser: true })
+    .then(() => {
+        console.log('[LOG]::[CONNECTION]::CONNECTED\n');
+    })
+    .catch(function handleMongooseError(error) {
+        console.log('\n[LOG]::[CONNECTION]::CONNECTION FAILED.')
+        console.log(error);
+    })
 
 // const { DB_HOST, DB_NAME, DB_USER, DB_PASS } = process.env;
 // const connection = `mongodb+srv://${DB_USER}:${DB_PASS}@${DB_HOST}/${DB_NAME}`
@@ -65,7 +66,7 @@ const Transaction = mongoose.model('Transaction', {
 const MAX_LOGIN_ATTEMPTS = 3;
 
 
-/**VALIDATION */
+/**IBAN VALIDATION */
 function validateIban(iban) {
     const ibanUpper = iban.toUpperCase()
 
@@ -102,110 +103,127 @@ function calcControlNum(input){
 
 
 /**REQUEST HANDLING */
-server.post('/login', (req, res, next) => {
+server.post('/validate', (req, res, next) => {
     const reqIBAN = req.body.iban;
-    const reqPIN = req.body.pin;
-
+    
     // check if IBAN valid
     if(validateIban(reqIBAN) == false) {
-        console.log('invalid iban\n');
-        res.send(401, 'Invalid IBAN\n');
+        console.log('\n[LOG]::[VALIDATION]::INVALID IBAN');
+        res.send(401, 'Invalid IBAN.\n');
     }
     else {
-        // look for the IBAN and check if it's not blocked
-        return User.findOne({$and: [{ iban: reqIBAN }, { attempts: { $lt: MAX_LOGIN_ATTEMPTS } }]})
-            .then((result) => {
-
-                console.log('\n[LOG]:[LOGIN]:FIND IBAN AND CHECK ATTEMPTS');
-                console.log(result);
-                console.log('[LOG]:[LOGIN]:ENDLOG\n');
-
-                User.findOne({$and: [{ iban: reqIBAN }, { pin: reqPIN }]})
+        // find user with specified IBAN
+        return User.findOne({$and: [{ iban: reqIBAN }]})
+            // if found
+            .then((existingAccount) => {
+                console.log('\n[LOG]::[VALIDATION]::ACCOUNT FOUND');
+                console.log(existingAccount);
+                // check if it's not blocked
+                User.findOne({$and: [{ iban: existingAccount.body.iban }, { attempts: { $lt: MAX_LOGIN_ATTEMPTS } }] })
+                    // not blocked
                     .then((result) => {
-
-                        console.log('[LOG]:[LOGIN]:FIND IBAN AND PIN COMBINATION');
-                        //console.log(result);
-                        console.log('[LOG]:[LOGIN]:ENDLOG\n');
-
-                        if(result == null) {
-
-                            console.log('[LOG]:[LOGIN]:IBAN AND PIN COMBINATION NOT FOUND');
-                            console.log('[LOG]:[LOGIN]:INCREMENTING ATTEMPTS ON IBAN');
-                            console.log('[LOG]:[LOGIN]:ENDLOG\n');
-
-                            User.findOneAndUpdate({$and: [{ iban: reqIBAN }]}, { $inc: { attempts: 1 }})
-                                .then((result) => {
-                                    console.log('\n[LOG]:[LOGIN]:ATTEMPTS INCREMENTED');
-                                    console.log(result);
-                                    console.log('[LOG]:[LOGIN]:ENDLOG\n');
-                                    res.send(401, 'Incorrect PIN');
-                                })
-                                .catch((error) => {
-                                    console.log('[LOG]:[LOGIN]:ATTEMPTS INCREMENTATION FAILURE');
-                                    console.log(error);
-                                    console.log('[LOG]:[LOGIN]:ENDLOG\n');
-                                })
-                        }
-                        else {
-                            User.findOneAndUpdate({$and: [{ iban: reqIBAN }]}, { attempts: 0 }) 
-                            .then((result) => {
-                                console.log('[LOG]:[LOGIN]:LOG IN SUCCESS. ATTEMPTS RESET.');
-                                console.log('[LOG]:[LOGIN]:ENDLOG\n');
-                                res.send(200, result);
-                            })
-                            .catch((error) => {
-                                console.log('[LOG]:[LOGIN]:UNABLE TO FIND IBAN.');
-                                console.log(error);
-                                console.log('[LOG]:[LOGIN]:ENDLOG\n');
-                            });
-                        }
+                        console.log('\n[LOG]::[VALIDATION]::ACCOUNT NOT BLOCKED');
+                        console.log(result);
+                        res.send(200, result);
                     })
+                    // blocked
                     .catch((error) => {
-                        console.log('\n[LOG]:[LOGIN]:COULD NOT CONDUCT SEARCH ON IBAN-PIN COMBINATION.\n');
+                        console.log('\n[LOG]::[VALIDATION]::ACCOUNT BLOCKED');
                         console.log(error);
-                        console.log('\n[LOG]:[LOGIN]:ENDLOG\n');
-                    })
+                        res.send(401, error);
+                    });
             })
+            // iban not found
             .catch((error) => {
-                console.log('\n[LOG]:[LOGIN]:IBAN IS BLOCKED.');
+                console.log('\n[LOG]::[VALIDATION]::IBAN DOES NOT EXIST')
                 console.log(error);
-                res.send(error);
+                res.send(401, error);
             });
     }
 });
 
-server.post('/getbalance', (req, res, next) => {
-    const iban = req.body.iban;
-    const pin = req.body.pin;
+server.post('/login', (req, res, next) => {
+    const reqIBAN = req.body.iban;
+    const reqPIN = req.body.pin;
 
-    // find user with iban and pin
-    return User.findOne({$and: [{iban: iban}, {pin: pin}]})
+    // check IBAN-PIN combination
+    return User.findOne({$and: [{ iban: reqIBAN }, { pin: reqPIN }]})
+        // check if there exists any documents with this information
         .then((result) => {
-            console.log(result);
-            // send back the balance
-            res.send(200, result.balance);
+            console.log('\n[LOG]::[LOGIN]::FIND IBAN AND PIN COMBINATION');
+            console.log(result)
+
+            // if combination is invalid
+            if(result == null) {
+                console.log('\n[LOG]::[LOGIN]::IBAN AND PIN COMBINATION NOT FOUND');
+                console.log('[LOG]::[LOGIN]::INCREMENTING LOG IN ATTEMPTS');
+
+                // increment attempts on IBAN
+                User.findOneAndUpdate({$and: [{ iban: reqIBAN }]}, { $inc: { attempts: 1 }})
+                    // incremented
+                    .then((result) => {
+                        console.log('\n[LOG]::[LOGIN]::LOG IN ATTEMPTS INCREMENTED');
+                        console.log(result);
+                        res.send(401, 'Incorrect PIN');
+                    })
+                    // unable to increment
+                    .catch((error) => {
+                        console.log('\n[LOG]::[LOGIN]::COULD NOT INCREMENT LOG IN ATTEMPTS');
+                        console.log(error);
+                    })
+            }
+            else {
+                User.findOneAndUpdate({$and: [{ iban: reqIBAN }]}, { attempts: 0 }) 
+                .then((result) => {
+                    console.log('\n[LOG]::[LOGIN]::LOG IN SUCCESS, ATTEMPTS RESET');
+                    res.send(200, result);
+                })
+                .catch((error) => {
+                    console.log('\n[LOG]::[LOGIN]::UNABLE TO FIND IBAN');
+                    console.log(error);
+                });
+            }
         })
         .catch((error) => {
+            console.log('\n[LOG]:[LOGIN]:COULD NOT CONDUCT SEARCH ON IBAN-PIN COMBINATION');
             console.log(error);
-            res.send(error);
+        });
+});
+
+server.post('/getbalance', (req, res, next) => {
+    const iban = req.body.iban;
+
+    // retrieve IBAN
+    return User.findOne({$and: [{iban: iban}]})
+        // success
+        .then((result) => {
+            console.log('\n[LOG]::[GET BALANCE]::SUCESSFULLY RETRIEVED');
+            console.log(result);
+            res.send(200, result.balance);
+        })
+        // failure
+        .catch((error) => {
+            console.log('\n[LOG]::[GET BALANCE]::RETRIEVAL FAILED');            
+            console.log(error);
         });
 });
 
 server.post('/withdraw', (req, res, next) => {
     const iban = req.body.iban;
-    const pin = req.body.pin;
     const amount = req.body.amount;
 
-    // find iban and pin
-    User.findOne({$and: [{iban: iban}, {pin: pin}]})
-        // if user is found
-        .then(function withdrawable(user) {
+    // find user IBAN
+    User.findOne({$and: [{iban: iban}]})
+        // user found
+        .then((user) => {
+            // user balance too low
             if(amount > user.balance) {
+                console.log('\n[LOG]::[WITHDRAWAL]::USER BALANCE TOO LOW')
                 res.send(412, 'Balance too low.\n');
             }
             else {
                 // subtract amount from balance
-                User.findOneAndUpdate({$and: [{ iban: iban }, { pin: pin }]}, { $inc: { balance: -amount } }, { new: true })
+                User.findOneAndUpdate({$and: [{ iban: iban }]}, { $inc: { balance: -amount } }, { new: true })
                     .then(() => {
                         //create a transaction document in database
                         Transaction.create({
@@ -214,28 +232,29 @@ server.post('/withdraw', (req, res, next) => {
                             location: "SBER-ATM01",
                             time: new Date()
                         })
-                        .then(result => {
-                            res.send(200, result);
+                        .then((result) => {
+                            console.log('\n[LOG]::[WITHDRAWAL]::[TRANSACTION]::TRANSACTION RECORD CREATED')
+                            console.log(result)
+                            //res.send(200, result);
                         })
                         .catch((error) => {
-                            console.log('\n[LOG]:[WITHDRAW]:COULD NOT CREATE TRANSACTION DOCUMENT.\n');
+                            console.log('\n[LOG]::[WITHDRAWAL]::[TRANSACTION]::COULD NOT CREATE TRANSACTION RECORD');
                             console.log(error);
-                            console.log('\n[LOG]:[WITHDRAW]:ENDLOG\n');
-                        })
+                        });
                     })
                     .catch((error) => {
+                        console.log('\n[LOG]::[WITHDRAWAL]::ERROR IN SUBTRACTION');
                         console.log(error);
-                        res.send(error);
                     });
             }
         })
         .catch((error) => {
+            console.log('\n[LOG]::[WITHDRAWAL]::COULD NOT FIND IBAN');
             console.log(error);
-            res.send(error);
         })
 });
 
-/**RUN */
+/**SET PORT */
 server.listen(8080, () => {
     console.log('%s listening at %s', server.name, server.url);
 });
