@@ -140,19 +140,12 @@ server.post('/validate', (req, res, next) => {
                 console.log('\n[LOG]::[VALIDATION]::ACCOUNT FOUND');
                 console.log(existingAccount);
                 // check if it's not blocked
-                User.findOne({$and: [{ iban: reqIBAN }, { attempts: { $lt: MAX_LOGIN_ATTEMPTS } }] })
-                    // not blocked
-                    .then((result) => {
-                        console.log('\n[LOG]::[VALIDATION]::ACCOUNT NOT BLOCKED');
-                        console.log(result);
-                        res.send(200, result);
-                    })
-                    // blocked
-                    .catch((error) => {
-                        console.log('\n[LOG]::[VALIDATION]::ACCOUNT BLOCKED');
-                        console.log(error);
-                        res.send(401, error.attempts);
-                    });
+                if(existingAccount.attempts > 2) {
+                    res.send(401);
+                }
+                else {
+                    res.send(200);
+                }
             })
             // iban not found
             .catch((error) => {
