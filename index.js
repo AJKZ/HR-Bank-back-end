@@ -228,6 +228,7 @@ server.post('/getbalance', (req, res, next) => {
         .catch((error) => {
             console.log('\n[LOG]::[GET BALANCE]::RETRIEVAL FAILED');            
             console.log(error);
+            res.send(error);
         });
 });
 
