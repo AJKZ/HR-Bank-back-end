@@ -1,6 +1,7 @@
 const corsMiddleware = require('restify-cors-middleware');
 const restify = require('restify');
 const mongoose = require('mongoose');
+const SerialPort = require('serialport');
 require('dotenv').config();
 
 const server = restify.createServer({
@@ -18,35 +19,49 @@ server.pre(cors.preflight);
 server.use(cors.actual);
 server.use(restify.plugins.bodyParser());
 
-/**CONNECTION */
+/**SERIAL
+ * Definitions for receipt printer and dispsenser
+ */
+// const pPort = new SerialPort('', { baudRate: 9600 });
+// const dPort = new SerialPort('', { baudRate: 9600 });
+
+
+/**MONGOOSE CONNECTION */
+// LOCALHOST
 // mongoose.connect('mongodb://localhost:27017/sber', { useNewUrlParser: true })
 //     .then(() => {
-//         console.log('connected')
+//         console.log('[LOG]::[CONNECTION]::CONNECTED - LOCAL\n');
 //     })
 //     .catch((error) => {
+//         console.log('\n[LOG]::[CONNECTION]::CONNECTION FAILED - LOCAL')
 //         console.log(error)
 //     });
 
+// MONGODB ATLAS - Direct route
 mongoose.connect('mongodb+srv://AJKZ:Ek3dcggfvtrMDB@cluster-hr-sber-gpvua.mongodb.net/sber?retryWrites=true&w=majority', { useNewUrlParser: true })
     .then(() => {
-        console.log('[LOG]::[CONNECTION]::CONNECTED\n');
+        console.log('[LOG]::[CONNECTION]::CONNECTED - CLOUD\n');
     })
     .catch(function handleMongooseError(error) {
         console.log('\n[LOG]::[CONNECTION]::CONNECTION FAILED.')
         console.log(error);
-    })
+    });
 
+// MONGODB ATLAS - Hidden env
 // const { DB_HOST, DB_NAME, DB_USER, DB_PASS } = process.env;
 // const connection = `mongodb+srv://${DB_USER}:${DB_PASS}@${DB_HOST}/${DB_NAME}`
 // mongoose.connect(connection, { useNewUrlParser: true })
 //     .then (() => {
-//         console.log('connected')
+//         console.log('[LOG]::[CONNECTION]::CONNECTED - CLOUD\n');
 //     })
 //     .catch(function handleMongooseError(error) {
+//         console.log('\n[LOG]::[CONNECTION]::CONNECTION FAILED.')
 //         console.log(error)
 //     });
 
-/* MODELS */
+
+/**MONGOOSE-MONGODB MODELS */
+// Users
 const User = mongoose.model('User', {
     iban: String,
     pin: String,
@@ -54,6 +69,7 @@ const User = mongoose.model('User', {
     balance: Number
 });
 
+// Transactions
 const Transaction = mongoose.model('Transaction', {
     iban: String,
     amount: Number,
@@ -62,7 +78,7 @@ const Transaction = mongoose.model('Transaction', {
 });
 
 
-/**VARIABLES */
+/**GLOBAL */
 const MAX_LOGIN_ATTEMPTS = 3;
 
 
@@ -103,13 +119,18 @@ function calcControlNum(input){
 
 
 /**REQUEST HANDLING */
+/**
+ * Checks whether the IBAN in the request is valid,
+ * looks in the database if the IBAN exists,
+ * checks if the existing IBAN is blocked or not.
+ */
 server.post('/validate', (req, res, next) => {
     const reqIBAN = req.body.iban;
     
     // check if IBAN valid
     if(validateIban(reqIBAN) == false) {
         console.log('\n[LOG]::[VALIDATION]::INVALID IBAN');
-        res.send(401, 'Invalid IBAN.\n');
+        res.send(403, 'Invalid IBAN.\n');
     }
     else {
         // find user with specified IBAN
@@ -142,6 +163,12 @@ server.post('/validate', (req, res, next) => {
     }
 });
 
+/**
+ * Simple log in functionality
+ * Checks IBAN and PIN combination,
+ * if combination doesn't match, will increment log in attempts on IBAN.
+ * On success, will reset log in attempts.
+ */
 server.post('/login', (req, res, next) => {
     const reqIBAN = req.body.iban;
     const reqPIN = req.body.pin;
@@ -190,6 +217,9 @@ server.post('/login', (req, res, next) => {
         });
 });
 
+/**
+ * Simply returns the balance of requested IBAN
+ */
 server.post('/getbalance', (req, res, next) => {
     const iban = req.body.iban;
 
@@ -208,6 +238,12 @@ server.post('/getbalance', (req, res, next) => {
         });
 });
 
+/**
+ * Checks IBAN for balance,
+ * if balance is too low, withdrawal does not continue
+ * if balance is sufficient, simply continues with transaction.
+ * On success, creates transaction document in DB.
+ */
 server.post('/withdraw', (req, res, next) => {
     const iban = req.body.iban;
     const amount = req.body.amount;
@@ -253,6 +289,7 @@ server.post('/withdraw', (req, res, next) => {
             console.log(error);
         })
 });
+
 
 /**SET PORT */
 server.listen(8080, () => {

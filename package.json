@@ -21,7 +21,8 @@
     "log-timestamp": "^0.3.0",
     "mongoose": "^5.4.19",
     "restify": "^8.1.1",
-    "restify-cors-middleware": "^1.1.1"
+    "restify-cors-middleware": "^1.1.1",
+    "serialport": "^7.1.5"
   },
   "devDependencies": {
     "babel-preset-env": "^1.7.0",
