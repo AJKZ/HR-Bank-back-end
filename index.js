@@ -264,7 +264,7 @@ server.post('/withdraw', (req, res, next) => {
                         .then((result) => {
                             console.log('\n[LOG]::[WITHDRAWAL]::[TRANSACTION]::TRANSACTION RECORD CREATED')
                             console.log(result)
-                            //res.send(200, result);
+                            res.send(200, result);
                         })
                         .catch((error) => {
                             console.log('\n[LOG]::[WITHDRAWAL]::[TRANSACTION]::COULD NOT CREATE TRANSACTION RECORD');
