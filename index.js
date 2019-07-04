@@ -151,14 +151,14 @@ server.post('/validate', (req, res, next) => {
                     .catch((error) => {
                         console.log('\n[LOG]::[VALIDATION]::ACCOUNT BLOCKED');
                         console.log(error);
-                        res.send(401, error);
+                        res.send(401, error.attempts);
                     });
             })
             // iban not found
             .catch((error) => {
                 console.log('\n[LOG]::[VALIDATION]::IBAN DOES NOT EXIST')
                 console.log(error);
-                res.send(401, error);
+                res.send(403, error);
             });
     }
 });
