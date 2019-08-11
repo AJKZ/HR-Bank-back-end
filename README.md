@@ -4,7 +4,7 @@
 
 First personal Node.js app. 
 
-Application simulates simple functionalities of a bank's back-end. <br>
+Application simulates simple functionalities of a bank's back-end through HTTP requests. <br>
 Includes functionality for logging in and withdawing (fake) money.
 
-Makes use of [MongoDB](https://www.mongodb.com/). 
+Uses [MongoDB](https://www.mongodb.com/). 
