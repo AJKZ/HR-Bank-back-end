@@ -38,7 +38,9 @@ server.use(restify.plugins.bodyParser());
 //     });
 
 // MONGODB ATLAS - Direct route
-mongoose.connect('mongodb+srv://AJKZ:Ek3dcggfvtrMDB@cluster-hr-sber-gpvua.mongodb.net/sber?retryWrites=true&w=majority', { useNewUrlParser: true })
+const { DB_PASS } = process.env;
+
+mongoose.connect(`mongodb+srv://AJKZ:${DB_PASS}@cluster-hr-sber-gpvua.mongodb.net/sber?retryWrites=true&w=majority`, { useNewUrlParser: true })
     .then(() => {
         console.log('[LOG]::[CONNECTION]::CONNECTED - CLOUD\n');
     })
